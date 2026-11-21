@@ -8,7 +8,7 @@ export default defineConfig({
     VitePWA({
       registerType: 'prompt',
       injectRegister: null,
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon.svg', 'cane-concept.jpg'],
       manifest: {
         id: '/',
         name: 'VisionAid — Seeing Beyond Sight',
