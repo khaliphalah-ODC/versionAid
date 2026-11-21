@@ -1,112 +1,218 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue'
-import { circleMarker, map as createMap, polyline, tileLayer, type LatLngTuple } from 'leaflet'
-import 'leaflet/dist/leaflet.css'
-import { demoRoute, type LocationSample } from '../data-sources/location'
+import { computed, ref, watch } from 'vue'
+import { importLibrary, setOptions } from '@googlemaps/js-api-loader'
+import type { LocationSample } from '../data-sources/location'
 
 const props = defineProps<{
   point?: LocationSample
-  demo: boolean
-  showTiles: boolean
+  route?: readonly [number, number][]
+  enabled: boolean
+  online: boolean
 }>()
 
-const container = ref<HTMLElement>()
-const tileError = ref(false)
-let map: ReturnType<typeof createMap> | undefined
-let marker: ReturnType<typeof circleMarker> | undefined
-let route: ReturnType<typeof polyline> | undefined
-let tiles: ReturnType<typeof tileLayer> | undefined
-
-function center() {
-  if (!map) return
-  if (props.point) {
-    map.setView([props.point.latitude, props.point.longitude], Math.max(16, map.getZoom()), { animate: false })
-  } else if (route) {
-    map.fitBounds(route.getBounds(), { padding: [25, 25], maxZoom: 17, animate: false })
+declare global {
+  interface Window {
+    gm_authFailure?: () => void
   }
 }
 
-function syncMode() {
-  if (!map) return
-  tiles?.remove()
-  tiles = undefined
-  route?.remove()
-  route = props.demo ? polyline([...demoRoute], { color: '#23695e', weight: 5 }).addTo(map) : undefined
-  if (route) map.fitBounds(route.getBounds(), { padding: [25, 25], maxZoom: 17, animate: false })
-  else map.setView([0, 0], 2, { animate: false })
+const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim()
+const mapId = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID?.trim()
+const defaultCenter = { lat: 6.3156, lng: -10.8074 } // Initial map viewport in Monrovia
+const container = ref<HTMLElement>()
+const ready = ref(false)
+const error = ref('')
+const mapType = ref<'roadmap' | 'satellite'>('roadmap')
+const showMap = computed(() => props.enabled && props.online && apiKey && mapId && !error.value)
+
+let map: google.maps.Map | undefined
+let marker: google.maps.marker.AdvancedMarkerElement | undefined
+let accuracy: google.maps.Circle | undefined
+let routeLine: google.maps.Polyline | undefined
+
+function pointPosition(point: LocationSample): google.maps.LatLngLiteral {
+  return { lat: point.latitude, lng: point.longitude }
+}
+
+function center() {
+  if (!map || !ready.value) return
+  if (props.point) {
+    map.panTo(pointPosition(props.point))
+    if ((map.getZoom() ?? 0) < 16) map.setZoom(16)
+  } else if (routeLine) {
+    fitRoute()
+  }
+}
+
+function fitRoute() {
+  if (!map || !props.route) return
+  const bounds = new google.maps.LatLngBounds()
+  for (const [lat, lng] of props.route) bounds.extend({ lat, lng })
+  if (!bounds.isEmpty()) map.fitBounds(bounds, 36)
+}
+
+function syncRoute() {
+  if (!map || !routeLine) return
+  routeLine.setPath(props.route?.map(([lat, lng]) => ({ lat, lng })) ?? [])
+  routeLine.setMap(props.route?.length ? map : null)
+  if (props.route?.length) fitRoute()
+  else if (!props.point) {
+    map.setCenter(defaultCenter)
+    map.setZoom(12)
+  }
 }
 
 function syncPoint() {
-  if (!map) return
+  if (!map || !marker || !accuracy) return
   if (!props.point) {
-    marker?.remove()
-    marker = undefined
+    marker.map = null
+    marker.position = null
+    accuracy.setMap(null)
     return
   }
-  const position: LatLngTuple = [props.point.latitude, props.point.longitude]
-  if (marker) {
-    marker.setLatLng(position)
-    if (!map.getBounds().contains(position)) center()
-  } else {
-    marker = circleMarker(position, {
-      radius: 9, color: '#102e2c', fillColor: '#f4dfac', fillOpacity: 1, weight: 3,
-    }).addTo(map)
-    if (!props.demo) center()
+
+  const position = pointPosition(props.point)
+  const firstPoint = !marker.map
+  marker.position = position
+  marker.title = props.route ? 'Simulated position' : 'Current device position'
+  marker.map = map
+  accuracy.setOptions({ center: position, radius: props.point.accuracy })
+  accuracy.setMap(map)
+  if (!props.route && (firstPoint || map.getBounds()?.contains(position) === false)) center()
+}
+
+watch(container, async (host, _previous, onCleanup) => {
+  if (!host || !apiKey || !mapId) return
+  let cancelled = false
+  let tilesListener: google.maps.MapsEventListener | undefined
+  const previousAuthFailure = window.gm_authFailure
+  const authFailure = () => {
+    if (!cancelled) error.value = 'Google Maps rejected the configuration. Check the API key, website restrictions, API enablement, and billing.'
+    previousAuthFailure?.()
   }
-}
+  window.gm_authFailure = authFailure
+  const deadline = setTimeout(() => {
+    error.value = 'Google Maps did not finish loading. Check your connection and try again.'
+  }, 20_000)
 
-function syncTiles() {
-  if (!map) return
-  tileError.value = false
-  tiles?.remove()
-  tiles = undefined
-  if (!props.showTiles || (!props.demo && !props.point)) return
-  tiles = tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    referrerPolicy: 'strict-origin-when-cross-origin',
+  onCleanup(() => {
+    cancelled = true
+    clearTimeout(deadline)
+    if (window.gm_authFailure === authFailure) window.gm_authFailure = previousAuthFailure
+    tilesListener?.remove()
+    if (marker) marker.map = null
+    accuracy?.setMap(null)
+    routeLine?.setMap(null)
+    map = marker = accuracy = routeLine = undefined
+    ready.value = false
+    host.replaceChildren()
   })
-  tiles.on('tileerror', () => { tileError.value = true })
-  tiles.addTo(map)
-}
 
-onMounted(() => {
-  if (!container.value) return
-  map = createMap(container.value, { zoomAnimation: false, scrollWheelZoom: false })
-  syncMode()
-  syncPoint()
-  syncTiles()
+  try {
+    // The loader accepts options once per window. Subsequent visits reuse its libraries.
+    if (!window.google?.maps?.importLibrary) setOptions({ key: apiKey, v: 'weekly', authReferrerPolicy: 'origin' })
+    const [{ Map, Circle, Polyline }, { AdvancedMarkerElement }] = await Promise.all([
+      importLibrary('maps'),
+      importLibrary('marker'),
+    ])
+    if (cancelled || error.value) return
+    const instance = new Map(host, {
+      mapId,
+      center: props.point ? pointPosition(props.point) : defaultCenter,
+      zoom: props.point ? 16 : 12,
+      mapTypeId: mapType.value,
+      mapTypeControl: false,
+      zoomControl: true,
+      streetViewControl: false,
+      keyboardShortcuts: true,
+      gestureHandling: 'cooperative',
+    })
+    map = instance
+    marker = new AdvancedMarkerElement()
+    accuracy = new Circle({
+      strokeColor: '#005760', strokeOpacity: 0.9, strokeWeight: 2,
+      fillColor: '#087f8c', fillOpacity: 0.2, clickable: false,
+    })
+    routeLine = new Polyline({ strokeColor: '#00646f', strokeWeight: 5, clickable: false })
+
+    tilesListener = instance.addListener('tilesloaded', () => {
+      clearTimeout(deadline)
+      tilesListener?.remove()
+      if (!instance.getMapCapabilities().isAdvancedMarkersAvailable) {
+        error.value = 'Google Maps could not enable location markers. Check that the map ID is configured for a JavaScript map.'
+        return
+      }
+      ready.value = true
+      syncRoute()
+      syncPoint()
+    })
+  } catch {
+    if (!cancelled) error.value = 'Google Maps could not load. Check your connection and map configuration, then try again.'
+  }
+}, { flush: 'post' })
+
+watch(() => props.enabled, (enabled) => {
+  if (!enabled) error.value = ''
 })
+watch(() => props.route, () => { if (ready.value) syncRoute() })
+watch(() => props.point, () => { if (ready.value) syncPoint() })
+watch(mapType, (type) => map?.setMapTypeId(type))
 
-watch(() => props.demo, syncMode)
-watch(() => props.point, syncPoint)
-watch([() => props.showTiles, () => props.demo, () => Boolean(props.point)], syncTiles)
-onUnmounted(() => map?.remove())
-
-defineExpose({ center })
+defineExpose({ center, ready })
 </script>
 
 <template>
+  <div class="map-options" v-if="ready" role="group" aria-label="Google Maps view">
+    <button type="button" :aria-pressed="mapType === 'roadmap'" @click="mapType = 'roadmap'">Street map</button>
+    <button type="button" :aria-pressed="mapType === 'satellite'" @click="mapType = 'satellite'">Satellite</button>
+  </div>
   <div
+    v-if="showMap"
     ref="container"
     class="location-map"
     role="region"
-    aria-label="Interactive location map"
-    aria-describedby="map-description"
+    aria-label="Interactive Google Maps"
+    :aria-describedby="ready ? 'map-description' : undefined"
   ></div>
-  <p id="map-description">
-    {{ demo ? 'Map shows the simulated route. The location details below describe the simulated position.'
-      : 'The live marker appears when a current position is available. Location details are listed below.' }}
+  <p role="status">
+    <template v-if="!online">Offline. Google Maps tiles are unavailable. Device location may still work if your device can determine a position.</template>
+    <template v-else-if="!apiKey">Google Maps is unavailable. The Maps API key has not been configured.</template>
+    <template v-else-if="!mapId">Google Maps is unavailable. The Google Maps map ID has not been configured.</template>
+    <template v-else-if="error">{{ error }}</template>
+    <template v-else-if="enabled && !ready">Loading Google Maps…</template>
   </p>
-  <p v-if="showTiles && tileError" role="status">Some street tiles could not load. Location details are still available.</p>
+  <p v-if="ready" id="map-description">
+    {{ route ? 'The line and marker represent the simulated route and position.'
+      : 'The marker shows the current device position. The circle shows the estimated accuracy in meters.' }}
+    Location details are listed below.
+  </p>
+  <button v-if="enabled && online && error" type="button" @click="error = ''">Retry Google Maps</button>
 </template>
 
 <style scoped>
 .location-map {
   height: clamp(15rem, 48vw, 25rem);
   isolation: isolate;
-  background: #dcece6;
   border: 1px solid #49615c;
   border-radius: .5rem;
+  overflow: hidden;
 }
+.map-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  margin-bottom: .5rem;
+}
+button {
+  min-height: 44px;
+  padding: .45rem .8rem;
+  border: 1px solid #49615c;
+  border-radius: .4rem;
+  background: white;
+  color: #102e2c;
+  font: inherit;
+  cursor: pointer;
+}
+button[aria-pressed='true'] { background: #102e2c; color: white; }
+p:empty { margin: 0; }
 </style>

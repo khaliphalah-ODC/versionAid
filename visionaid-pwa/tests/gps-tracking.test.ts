@@ -6,8 +6,8 @@ import { LOCATION_STALE_MS } from '../src/data-sources/location'
 
 vi.mock('../src/components/LocationMap.vue', () => ({
   default: defineComponent({
-    props: ['point', 'demo', 'showTiles'],
-    setup: (props) => () => h('div', { 'data-marker': props.point?.latitude, 'data-tiles': props.showTiles }),
+    props: ['point', 'route', 'enabled', 'online'],
+    setup: (props) => () => h('div', { 'data-marker': props.point?.latitude }),
   }),
 }))
 
@@ -142,7 +142,7 @@ describe('GPS tracking dashboard', () => {
     demoRadio.click()
     await nextTick()
     expect(clear).toHaveBeenCalledWith(0)
-    expect(container.textContent).toContain('DEMO — SIMULATED LOCATION')
+    expect(container.textContent).toContain('DEMO MODE — SIMULATED LOCATION')
     expect(container.textContent).not.toContain('6.300000 degrees')
     button('Start Simulation').click()
     await vi.advanceTimersByTimeAsync(2_000)

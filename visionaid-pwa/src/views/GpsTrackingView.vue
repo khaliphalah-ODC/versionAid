@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import LocationMap from '../components/LocationMap.vue'
+import { demoRoute } from '../data-sources/location'
 import { useGpsTracking } from '../composables/useGpsTracking'
 
 const { mode, status, running, sample, current, selectMode, start, stop, reset } = useGpsTracking()
 const map = ref<InstanceType<typeof LocationMap>>()
-const tilesEnabled = ref(false)
+const mapEnabled = ref(false)
 const online = ref(navigator.onLine)
 const isDemo = computed(() => mode.value === 'demo')
 const marker = computed(() => isDemo.value ? sample.value : current.value)
@@ -32,7 +33,7 @@ const message = computed(() => {
 
 function setMode(next: 'real' | 'demo') {
   if (mode.value === next) return
-  tilesEnabled.value = false
+  mapEnabled.value = false
   selectMode(next)
 }
 
@@ -59,7 +60,7 @@ onUnmounted(() => {
   </fieldset>
 
   <p class="status" role="status" aria-atomic="true">{{ message }}</p>
-  <p v-if="isDemo"><strong>DEMO — SIMULATED LOCATION</strong></p>
+  <p v-if="isDemo"><strong>DEMO MODE — SIMULATED LOCATION</strong></p>
   <p v-else>Start Tracking asks your browser for permission to read your device’s location. VisionAid keeps the last reading in this page.</p>
 
   <div class="actions">
@@ -72,18 +73,17 @@ onUnmounted(() => {
       <button type="button" :disabled="running" @click="start">Start Tracking</button>
       <button type="button" :disabled="!running" @click="stop">Stop Tracking</button>
     </template>
-    <button type="button" :disabled="!marker && !isDemo" @click="map?.center()">Center Map</button>
+    <button type="button" :disabled="!map?.ready || (!marker && !isDemo)" @click="map?.center()">{{ isDemo ? 'Center demo map' : 'Center on My Location' }}</button>
   </div>
 
   <section aria-labelledby="map-heading">
     <h2 id="map-heading">Location map</h2>
-    <label class="tile-option">
-      <input v-model="tilesEnabled" type="checkbox" :disabled="!online" aria-describedby="tiles-note">
-      Load OpenStreetMap street tiles
+    <label class="map-option">
+      <input v-model="mapEnabled" type="checkbox" :disabled="!online" aria-describedby="map-privacy">
+      Load Google Maps
     </label>
-    <p id="tiles-note">Street tiles are optional. Requests to OpenStreetMap reveal the approximate area visible on the map.</p>
-    <p v-if="!online" role="status">Offline. Street tiles are unavailable. Device location may still work if your device can determine a position.</p>
-    <LocationMap ref="map" :point="marker" :demo="isDemo" :show-tiles="tilesEnabled && online" />
+    <p id="map-privacy">Google Maps is optional. Loading it sends map viewport information and network metadata to Google.</p>
+    <LocationMap ref="map" :point="marker" :route="isDemo ? demoRoute : undefined" :enabled="mapEnabled" :online="online" />
   </section>
 
   <section aria-labelledby="details-heading">

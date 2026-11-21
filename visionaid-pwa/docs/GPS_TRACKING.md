@@ -1,76 +1,88 @@
 # GPS Tracking
 
-Open **GPS Tracking** in VisionAid to view a device position or run a simulated
-route. GPS starts off on every visit. The page shows coordinates, estimated
-accuracy in meters, the last successful update, and a readable tracking status.
-The interactive map supplements the text details.
+Open **GPS Tracking** in VisionAid to display device location or run a clearly
+labeled simulated route. Tracking starts off on every visit. The text panel
+provides latitude, longitude, estimated accuracy in meters, and the last
+successful update. Enable **Load Google Maps** to view Google's street or
+satellite map with an Advanced Marker and an estimated accuracy circle.
 
-## Run locally
+## Configure Google Maps
 
-From `visionaid-pwa`, run `npm ci` and `npm run dev`. Use localhost on the
-development computer. For a phone, deploy `npm run build` output to an HTTPS
-origin with a SPA fallback. A regular HTTP address on the local network is
-generally an insecure context for geolocation.
+1. In [Google Cloud Console](https://console.cloud.google.com/), select a project
+   and link a billing account. Enable the **Maps JavaScript API** for that project.
+2. Under Google Maps Platform **Map Management**, create a **JavaScript** map ID.
+   Use the ID from that project for Advanced Markers.
+3. Under **Credentials**, create a browser API key. Set its application
+   restriction to **Websites** and its API restriction to **Maps JavaScript API**.
+   Authorize the exact origins that should run the app, such as
+   `https://YOUR-SITE.netlify.app`, your production custom domain, and
+   `http://localhost:5173` on your development key. Add
+   `http://localhost:4173` to your development key to test production preview.
+   This app requests origin-only referrers. Configure allowed referrers at the
+   origin level, without restricting them to an individual app path.
+4. Copy `.env.example` to `.env.local` in `visionaid-pwa`. Set the two values
+   below and restart Vite. Run `npm ci` then `npm run dev`, or run
+   `npm run build` and `npm run preview` to test the built app.
 
-## How it works
+```dotenv
+VITE_GOOGLE_MAPS_API_KEY=your_restricted_browser_key
+VITE_GOOGLE_MAPS_MAP_ID=your_javascript_map_id
+```
 
-- `src/data-sources/location.ts` defines the provider contract and keeps browser
-  geolocation separate from the synthetic Monrovia demonstration route.
-- `useGpsTracking` owns the session, validates fixes, expires real fixes after
-  30 seconds, clears the watcher on stop or navigation, and ignores callbacks
-  from stopped sessions.
-- `GpsTrackingView` controls consent, mode selection, and textual status.
-  `LocationMap` renders a Leaflet marker and the demo route.
-- The browser provider asks for a first fix using `getCurrentPosition`, then
-  uses `watchPosition`. It permits a five-second cached fix and uses a
-  15-second acquisition timeout with high-accuracy mode off. The browser
-  controls actual sampling frequency and may use network location or GPS.
-- Demo Mode uses only generated points, advances every two seconds, and supports
-  start, pause, and reset. Switching sources clears the previous reading.
+Vite embeds browser variables in its built JavaScript. Browser keys and map IDs
+are visible to visitors. Keep actual environment files out of Git and restrict
+keys in Google Cloud. Use separate keys for development and production, set
+usage quotas where available, and configure billing budgets and alerts. Budget
+alerts notify you about spending. Use quotas to limit supported API usage.
 
-A stale, stopped, or failed device session labels any retained fix historical
-and removes its live marker. A pending browser permission prompt is controlled
-by the browser. VisionAid can stop processing its eventual result.
+[Google Maps setup and Advanced Markers](https://developers.google.com/maps/documentation/javascript/advanced-markers/start)
+· [Google key restrictions](https://developers.google.com/maps/api-security-best-practices)
 
-## Privacy, offline behavior, and browser limits
+## Deploy through GitHub and Netlify
 
-The app keeps the latest reading in page memory. It does not write location
-history to storage or send coordinates to a VisionAid server. Street tiles are
-off by default. Opting in sends approximate viewport information and standard
-network metadata to OpenStreetMap. The browser handles normal HTTP tile
-caching. VisionAid provides attribution and does not precache or bulk download
-street tiles. The offline app shell includes Leaflet and demo data, so text
-and route overlays can work without street tiles. Offline device positioning
-depends on the browser and device location capabilities.
+In the linked Netlify project, open **Project configuration → Environment
+variables** and add both variables to the **Builds** scope for production.
+Authorize the deployed HTTPS origin in the browser key's website restrictions.
+If deploy previews need a working map, use a separately restricted key for
+their intended origins. Push the code to the production branch and trigger a
+new build after changing the environment variables. The root `netlify.toml`
+builds from `visionaid-pwa` and publishes `dist`.
 
-Geolocation requires a secure context, browser permission, and enabled device
-location. Browsers can suspend pages and location updates when minimized, put
-in the background, or closed. Continuous background tracking would need an
-appropriate native mobile implementation with explicit operating system
-permissions and controls.
+[Netlify environment variables](https://docs.netlify.com/build/environment-variables/get-started/)
 
-Caretaker sharing is off and its control is disabled. A future system needs
-explicit start and stop consent, an authenticated user and caretaker, per-user
-authorization, private endpoints, and a defined retention and deletion policy.
-If Supabase is adopted, enforce these boundaries with row-level security.
-Keep simulated samples out of any real location-sharing pipeline.
+## Tracking, privacy, and offline behavior
 
-## Verification
+- VisionAid uses `getCurrentPosition` and `watchPosition` after **Start Tracking**.
+  The browser controls location sources and sampling frequency. Tracking
+  requires permission, device location services, and HTTPS or localhost.
+- VisionAid clears the watcher on stop or navigation and marks real readings
+  stale after 30 seconds. The latest successful fix stays in page memory and
+  is labeled historical when tracking stops or the fix expires. The live
+  marker and accuracy circle are removed. Reloading starts a new session.
+- Simulated points move along an illustrative Monrovia route with Start, Pause,
+  and Reset. The route overlays actual Google geography when a map is
+  available. It represents a demo sequence.
+- The GPS map accepts a normalized sample and optional route. Browser location
+  and demo location stay behind the existing provider interface. Future
+  Arduino NEO-M8N support can supply the same sample format after its
+  telemetry protocol is confirmed.
+- Opting into Google Maps sends viewport information and standard network
+  metadata to Google. VisionAid has no remote location storage or caretaker
+  sharing. Browser location can run while the map stays off.
+- The PWA caches its own shell. Google Maps requires a network connection,
+  and its tiles are excluded from the app's offline cache. GPS details and demo
+  controls remain available offline after the first online app load. Device
+  positioning offline depends on the browser and the phone.
+- Browser tracking is intended for foreground use. Continuous background GPS
+  would require an appropriate native mobile integration.
 
-Run `npm test` and `npm run build`. Tests cover permission handling, invalid
-fixes, timeout, stale data, starting and stopping, watcher cleanup and demo
-isolation alongside the existing telemetry tests.
+## Verify
 
-On Android, open the HTTPS deployment in Chrome, enable device location, and
-choose **GPS Tracking → Start Tracking**. Allow the browser prompt and confirm
-a marker, accuracy, and timestamp. Move outdoors and verify a new fix, then
-stop and confirm the historical label. Revoke the site permission and repeat
-the request to check the denied message. With TalkBack enabled, check the source
-selector, status announcements, controls, and coordinate details. After the app
-has opened online, disconnect and reopen the GPS route, then run Demo Mode.
-
-The local Chrome production check used emulated coordinates to verify the
-browser geolocation flow, marker updates, stopping, and keyboard access at
-390 px. It also checked the desktop sidebar, an offline GPS deep link, Demo
-Mode overlays, and navigation to Monitoring. Physical Android location
-acquisition and TalkBack remain to be verified on the presentation device.
+Run `npm test` and `npm run build`. On the configured HTTPS deployment, open
+`/gps` in Android Chrome, enable device location, and use **Start Tracking**.
+Allow permission and opt into Google Maps. Confirm a marker, accuracy circle,
+and timestamp, then walk outdoors to check updates. Test Street map, Satellite,
+zoom, pan, and **Center on My Location**. Stop and check that the historical
+details remain while the live overlays disappear. Revoke site permission to
+verify the denied state. Verify the demo route and controls with TalkBack, and
+reopen the installed app offline after a complete online load.
