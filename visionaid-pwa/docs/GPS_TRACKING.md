@@ -101,3 +101,36 @@ Monrovia viewport is a map starting point. VisionAid plots a device marker
 only after a valid, fresh browser fix. The first fix centers the map, subsequent
 fixes move the marker, and **Center on My Location** returns the view to the
 marker after panning.
+
+## Offline location and map recovery
+
+The service worker caches the VisionAid app shell, including the GPS controls
+and simulated route. It does not cache or prefetch Google Maps imagery. After
+one complete online load, the GPS page can reopen offline and still show the
+location interface. A new page session starts without a last-known reading.
+
+Device Location keeps the browser's position watcher active through connection
+changes and recoverable acquisition failures. Some Android devices and
+browsers continue supplying location from onboard sensors without internet.
+Others time out, return errors, or need a network-assisted fix. While the
+page stays open, VisionAid retains only the last valid reading in memory. If
+the fix expires or the browser reports a failure, the reading and timestamp
+remain visible with a historical label. New valid fixes replace it.
+
+Google Maps needs a connection. When it goes offline, VisionAid hides the map
+and shows a text status. After reconnecting, choose **Retry Map**. The map uses
+a fresh device fix if available, or reopens the last viewport as geographic
+context with no live marker. Retries never restart the location session.
+
+To test on Android Chrome, use the HTTPS deployment. Start Device Location
+outdoors, enable the map, and wait for a fix. Disable Wi-Fi and mobile data
+while keeping device Location enabled. Walk and compare coordinates, accuracy,
+and fix age in **Offline Location Status**. If fixes stop, confirm that the
+reading becomes historical and the old timestamp remains. Restore connectivity
+and select **Retry Map**, then verify Demo Mode separately. Toggle Location off
+and back on for a separate browser-unavailable test.
+
+A future ESP32 GPS integration can implement the existing location-provider
+interface. Confirm the firmware transport and fix-quality fields first, then
+validate coordinates, reported accuracy, timestamp, and freshness before using
+a reading. Offline display should remain independent of whichever map is loaded.

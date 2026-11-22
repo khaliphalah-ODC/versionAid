@@ -12,19 +12,25 @@ const online = ref(navigator.onLine)
 const isDemo = computed(() => mode.value === 'demo')
 const marker = computed(() => isDemo.value ? sample.value : current.value)
 const diagnosticsOpen = ref(false)
-const diagnosticsTime = ref(Date.now())
-const fixAgeSeconds = computed(() => sample.value
-  ? Math.floor(Math.max(0, diagnosticsTime.value - sample.value.timestamp) / 1000)
-  : undefined)
+const fixClock = ref(Date.now())
+const fixAge = computed(() => {
+  if (!sample.value) return 'Unavailable'
+  const seconds = Math.floor(Math.max(0, fixClock.value - sample.value.timestamp) / 1000)
+  return seconds === 1 ? '1 second' : seconds + ' seconds'
+})
 
-watch(diagnosticsOpen, (open, _previous, onCleanup) => {
-  if (!open) return
-  diagnosticsTime.value = Date.now()
-  const timer = setInterval(() => { diagnosticsTime.value = Date.now() }, 1000)
+watch(() => Boolean(sample.value), (hasFix, _previous, onCleanup) => {
+  if (!hasFix) return
+  fixClock.value = Date.now()
+  const timer = setInterval(() => { fixClock.value = Date.now() }, 1000)
   onCleanup(() => clearInterval(timer))
 })
 
 const time = computed(() => sample.value ? new Date(sample.value.timestamp) : undefined)
+
+const unableToGetFix = computed(() => !isDemo.value && (
+  status.value === 'stale' || status.value === 'unavailable' || status.value === 'timeout'
+))
 
 const realMessages = {
   idle: 'Not started. Select Start Tracking to request location access.',
@@ -34,7 +40,7 @@ const realMessages = {
   stale: 'Location stale. Waiting for a fresh reading. Try moving where your device has a better signal.',
   denied: 'Permission denied. Allow location access in your browser’s site settings, then try again.',
   unavailable: 'Location unavailable. Check that device location is enabled and try in an open area.',
-  timeout: 'Location timed out. Try again where your device can get a stronger signal.',
+  timeout: 'Location timed out. Try moving where your device can get a stronger signal.',
   unsupported: 'This browser does not expose location access. Use Demo Mode or try a supported browser.',
   insecure: 'Location access requires HTTPS or localhost. Open a secure URL or use Demo Mode.',
 }
@@ -101,18 +107,23 @@ onUnmounted(() => {
   </section>
 
   <section aria-labelledby="details-heading">
-    <h2 id="details-heading">{{ isDemo ? 'Simulated location details' : 'Device location details' }}</h2>
+    <h2 id="details-heading">{{ online ? 'Location status' : 'Offline Location Status' }}</h2>
+    <p><strong>Internet connectivity:</strong> {{ online ? 'Online' : 'Offline' }}</p>
+    <p v-if="isDemo">Source: Simulated location</p>
     <p v-if="sample && !current">{{ isDemo ? 'Last simulated reading.' : 'Last known reading. This position is historical.' }}</p>
-    <p v-if="!sample">{{ status === 'requesting' ? 'Waiting for the first location reading.' : 'No location reading is available.' }}</p>
+    <p v-if="unableToGetFix && sample">Unable to obtain a new location. Showing your last known position.</p>
+    <p v-else-if="!sample">{{ status === 'requesting' ? 'Waiting for the first location reading.' : 'No location reading is available.' }}</p>
     <p v-if="!isDemo && current && current.accuracy >= approximateLocationThresholdMeters">
       Your device is reporting an approximate location. Enable precise location for your browser if available,
       then try outdoors with a clear view of the sky.
     </p>
-    <dl v-if="sample">
-      <div><dt>Latitude</dt><dd>{{ sample.latitude.toFixed(6) }} degrees</dd></div>
-      <div><dt>Longitude</dt><dd>{{ sample.longitude.toFixed(6) }} degrees</dd></div>
-      <div><dt>{{ isDemo ? 'Simulated accuracy' : 'Estimated accuracy' }}</dt><dd>{{ Math.round(sample.accuracy) }} meters</dd></div>
-      <div><dt>Last successful update</dt><dd><time :datetime="time?.toISOString()">{{ time?.toLocaleString() }}</time></dd></div>
+    <dl>
+      <div><dt>GPS tracking status</dt><dd>{{ message }}</dd></div>
+      <div><dt>Latitude</dt><dd>{{ sample ? sample.latitude.toFixed(6) + ' degrees' : 'Unavailable' }}</dd></div>
+      <div><dt>Longitude</dt><dd>{{ sample ? sample.longitude.toFixed(6) + ' degrees' : 'Unavailable' }}</dd></div>
+      <div><dt>{{ isDemo ? 'Simulated accuracy' : 'Estimated accuracy' }}</dt><dd>{{ sample ? Math.round(sample.accuracy) + ' meters' : 'Unavailable' }}</dd></div>
+      <div><dt>Last successful fix</dt><dd><time v-if="time" :datetime="time.toISOString()">{{ time.toLocaleString() }}</time><template v-else>Unavailable</template></dd></div>
+      <div><dt>Fix age</dt><dd>{{ fixAge }}</dd></div>
     </dl>
   </section>
 
@@ -125,7 +136,7 @@ onUnmounted(() => {
       <div><dt>Longitude</dt><dd>{{ sample?.longitude ?? 'Unavailable' }}</dd></div>
       <div><dt>Estimated accuracy</dt><dd>{{ sample ? sample.accuracy + ' meters' : 'Unavailable' }}</dd></div>
       <div><dt>Fix timestamp (UTC)</dt><dd>{{ time?.toISOString() ?? 'Unavailable' }}</dd></div>
-      <div><dt>Fix age</dt><dd>{{ fixAgeSeconds === undefined ? 'Unavailable' : fixAgeSeconds + ' seconds' }}</dd></div>
+      <div><dt>Fix age</dt><dd>{{ fixAge }}</dd></div>
     </dl>
   </details>
 

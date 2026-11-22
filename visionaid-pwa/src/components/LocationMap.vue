@@ -22,9 +22,11 @@ const defaultCenter = { lat: 6.3156, lng: -10.8074 } // Initial map viewport in 
 const container = ref<HTMLElement>()
 const ready = ref(false)
 const error = ref('')
+const needsRetry = ref(false)
 const mapType = ref<'roadmap' | 'satellite'>('roadmap')
-const showMap = computed(() => props.enabled && props.online && apiKey && mapId && !error.value)
+const showMap = computed(() => props.enabled && props.online && apiKey && mapId && !error.value && !needsRetry.value)
 
+let offlineViewport: { center: google.maps.LatLngLiteral; zoom?: number } | undefined
 let centeredOnDeviceFix = false
 let map: google.maps.Map | undefined
 let marker: google.maps.marker.AdvancedMarkerElement | undefined
@@ -57,10 +59,6 @@ function syncRoute() {
   routeLine.setPath(props.route?.map(([lat, lng]) => ({ lat, lng })) ?? [])
   routeLine.setMap(props.route?.length ? map : null)
   if (props.route?.length) fitRoute()
-  else if (!props.point) {
-    map.setCenter(defaultCenter)
-    map.setZoom(12)
-  }
 }
 
 function syncPoint() {
@@ -103,6 +101,10 @@ watch(container, async (host, _previous, onCleanup) => {
     clearTimeout(deadline)
     if (window.gm_authFailure === authFailure) window.gm_authFailure = previousAuthFailure
     tilesListener?.remove()
+    if (!props.online && map) {
+      const center = map.getCenter()?.toJSON()
+      if (center) offlineViewport = { center, zoom: map.getZoom() }
+    }
     if (marker) marker.map = null
     accuracy?.setMap(null)
     routeLine?.setMap(null)
@@ -122,8 +124,8 @@ watch(container, async (host, _previous, onCleanup) => {
     if (cancelled || error.value) return
     const instance = new Map(host, {
       mapId,
-      center: props.point ? pointPosition(props.point) : defaultCenter,
-      zoom: props.point ? 16 : 12,
+      center: props.point ? pointPosition(props.point) : (offlineViewport?.center ?? defaultCenter),
+      zoom: props.point ? 16 : (offlineViewport?.zoom ?? 12),
       mapTypeId: mapType.value,
       mapTypeControl: false,
       zoomControl: true,
@@ -156,8 +158,21 @@ watch(container, async (host, _previous, onCleanup) => {
 }, { flush: 'post' })
 
 watch(() => props.enabled, (enabled) => {
-  if (!enabled) error.value = ''
+  if (!enabled) {
+    error.value = ''
+    needsRetry.value = false
+    offlineViewport = undefined
+  }
 })
+watch(() => props.online, (online) => {
+  if (!online && props.enabled) needsRetry.value = true
+}, { immediate: true })
+
+function retryMap() {
+  error.value = ''
+  needsRetry.value = false
+}
+
 watch(() => props.route, () => { if (ready.value) syncRoute() })
 watch(() => props.point, () => { if (ready.value) syncPoint() })
 watch(mapType, (type) => map?.setMapTypeId(type))
@@ -179,10 +194,11 @@ defineExpose({ center, ready })
     :aria-describedby="ready ? 'map-description' : undefined"
   ></div>
   <p role="status">
-    <template v-if="!online">Offline. Google Maps tiles are unavailable. Device location may still work if your device can determine a position.</template>
+    <template v-if="!online">Map unavailable offline. Device location can still update if your browser supplies a fix.</template>
     <template v-else-if="!apiKey">Google Maps is unavailable. The Maps API key has not been configured.</template>
     <template v-else-if="!mapId">Google Maps is unavailable. The Google Maps map ID has not been configured.</template>
     <template v-else-if="error">{{ error }}</template>
+    <template v-else-if="needsRetry">Connection restored. Select Retry Map to reload Google Maps.</template>
     <template v-else-if="enabled && !ready">Loading Google Maps…</template>
   </p>
   <p v-if="ready" id="map-description">
@@ -191,7 +207,7 @@ defineExpose({ center, ready })
     <template v-else>No current device position is plotted. The map starts in Monrovia and may show the last area viewed.</template>
     Location details are listed below.
   </p>
-  <button v-if="enabled && online && error" type="button" @click="error = ''">Retry Google Maps</button>
+  <button v-if="enabled && online && (error || needsRetry)" type="button" @click="retryMap">Retry Map</button>
 </template>
 
 <style scoped>

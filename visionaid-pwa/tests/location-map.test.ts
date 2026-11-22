@@ -12,7 +12,7 @@ const sample: LocationSample = { latitude: 6.31, longitude: -10.81, accuracy: 18
 const map = {
   addListener: vi.fn(),
   getMapCapabilities: vi.fn(),
-  setMapTypeId: vi.fn(), getBounds: vi.fn(),
+  setMapTypeId: vi.fn(), getCenter: vi.fn(),
   panTo: vi.fn(), getZoom: vi.fn(() => 12), setZoom: vi.fn(), setCenter: vi.fn(),
   fitBounds: vi.fn(),
 }
@@ -163,13 +163,56 @@ describe('Google Maps location map', () => {
     expect(host.textContent).toContain('Check that the map ID')
   })
 
+  it('shows a map-load error and retries without changing the current position', async () => {
+    vi.mocked(importLibrary).mockRejectedValueOnce(new Error('network failure'))
+    mount({ point: sample })
+    await settle()
+    await nextTick()
+    expect(host.textContent).toContain('Google Maps could not load')
+    expect(host.querySelector('.location-map')).toBeNull()
+    expect(marker.map).toBeUndefined()
+
+    host.querySelector('button')?.click()
+    await settle()
+    tileCallback()
+    await nextTick()
+    expect(marker.position).toEqual({ lat: 6.31, lng: -10.81 })
+  })
+
+  it('restores the last map viewport after reconnecting without plotting it as a fix', async () => {
+    const props = mount({ point: sample })
+    await settle()
+    tileCallback()
+    await nextTick()
+
+    const viewport = { lat: 6.45, lng: -10.6 }
+    map.getCenter.mockReturnValueOnce({ toJSON: () => viewport })
+    props.online = false
+    await settle()
+    props.point = undefined
+    props.online = true
+    await settle()
+    expect(host.textContent).toContain('Connection restored')
+    expect(initialize).toHaveBeenCalledTimes(1)
+    host.querySelector('button')?.click()
+    await settle()
+    expect(initialize).toHaveBeenLastCalledWith(expect.any(HTMLElement), expect.objectContaining({ center: viewport }))
+    tileCallback()
+    await nextTick()
+    expect(marker.map).toBeNull()
+    expect(host.textContent).toContain('No current device position is plotted')
+  })
+
   it('fits the demo route, labels simulated positions and removes overlays when offline', async () => {
     const props = mount({ point: sample, route: demoRoute, online: false })
     await settle()
-    expect(host.textContent).toContain('Google Maps tiles are unavailable')
+    expect(host.textContent).toContain('Map unavailable offline.')
     expect(importLibrary).not.toHaveBeenCalled()
 
     props.online = true
+    await settle()
+    expect(importLibrary).not.toHaveBeenCalled()
+    host.querySelector('button')?.click()
     await settle()
     tileCallback()
     await nextTick()
@@ -181,6 +224,6 @@ describe('Google Maps location map', () => {
     await nextTick()
     expect(marker.map).toBeNull()
     expect(routeLine.setMap).toHaveBeenLastCalledWith(null)
-    expect(host.textContent).toContain('Google Maps tiles are unavailable')
+    expect(host.textContent).toContain('Map unavailable offline.')
   })
 })

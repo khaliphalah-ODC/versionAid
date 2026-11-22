@@ -68,7 +68,6 @@ export function useGpsTracking() {
         status.value = 'unsupported'
         return
       }
-      sample.value = undefined
     }
 
     const provider = mode.value === 'demo' ? demo : browserLocationProvider(navigator.geolocation)

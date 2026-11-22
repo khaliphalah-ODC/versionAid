@@ -26,7 +26,6 @@ export function browserLocationProvider(geolocation: Geolocation): LocationProvi
   return {
     start(onSample, onError) {
       let stopped = false
-      let watching = false
       let watchId: number | undefined
       const stop = () => {
         stopped = true
@@ -36,7 +35,7 @@ export function browserLocationProvider(geolocation: Geolocation): LocationProvi
       const failure = ({ code }: GeolocationPositionError) => {
         if (stopped) return
         const error = code === 1 ? 'denied' : code === 3 ? 'timeout' : 'unavailable'
-        const terminal = error === 'denied' || !watching
+        const terminal = error === 'denied'
         if (terminal) stop()
         onError(error, terminal)
       }
@@ -46,11 +45,9 @@ export function browserLocationProvider(geolocation: Geolocation): LocationProvi
         onSample({ latitude, longitude, accuracy, timestamp })
       }
 
-      geolocation.getCurrentPosition((position) => {
+      function startWatch() {
         if (stopped) return
-        success(position)
         try {
-          watching = true
           const id = geolocation.watchPosition(success, failure, options)
           if (stopped) geolocation.clearWatch(id)
           else watchId = id
@@ -58,7 +55,15 @@ export function browserLocationProvider(geolocation: Geolocation): LocationProvi
           stop()
           onError('unavailable', true)
         }
-      }, failure, options)
+      }
+
+      geolocation.getCurrentPosition((position) => {
+        success(position)
+        startWatch()
+      }, (error) => {
+        failure(error)
+        startWatch()
+      }, options)
       return stop
     },
   }

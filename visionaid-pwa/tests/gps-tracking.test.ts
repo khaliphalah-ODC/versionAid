@@ -44,6 +44,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   watch.mockReturnValue(0)
   vi.stubGlobal('isSecureContext', true)
+  Object.defineProperty(navigator, 'onLine', { configurable: true, value: true })
   Object.defineProperty(navigator, 'geolocation', {
     configurable: true,
     value: { getCurrentPosition: initial, watchPosition: watch, clearWatch: clear },
@@ -59,6 +60,7 @@ afterEach(() => {
   app = undefined
   container.remove()
   Reflect.deleteProperty(navigator, 'geolocation')
+  Reflect.deleteProperty(navigator, 'onLine')
   vi.unstubAllGlobals()
   vi.useRealTimers()
 })
@@ -144,17 +146,71 @@ describe('GPS tracking dashboard', () => {
     expect(details.textContent).toContain('2026-11-21T12:00:02.000Z')
   })
 
-  it.each([[1, 'Permission denied'], [2, 'Location unavailable'], [3, 'Location timed out']])(
-    'handles browser error %i and allows another attempt',
+  it('stops after an initial permission denial', async () => {
+    button('Start Tracking').click()
+    fail(1)
+    await nextTick()
+    expect(status()).toContain('Permission denied')
+    expect(watch).not.toHaveBeenCalled()
+    expect(button('Start Tracking').disabled).toBe(false)
+  })
+
+  it.each([[2, 'Location unavailable'], [3, 'Location timed out']])(
+    'continues watching after an initial browser error %i',
     async (code, message) => {
       button('Start Tracking').click()
       fail(code)
       await nextTick()
       expect(status()).toContain(message)
-      expect(watch).not.toHaveBeenCalled()
-      expect(button('Start Tracking').disabled).toBe(false)
+      expect(container.textContent).not.toContain('Showing your last known position')
+      expect(watch).toHaveBeenCalledOnce()
+      watch.mock.calls[0][0](position())
+      await nextTick()
+      expect(status()).toContain('Tracking active')
     },
   )
+
+  it('keeps the watcher on through offline updates, loss of fix, and reconnection', async () => {
+    button('Start Tracking').click()
+    initial.mock.calls[0][0](position(6.49))
+    await nextTick()
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
+    window.dispatchEvent(new Event('offline'))
+    await nextTick()
+    expect(container.textContent).toContain('Offline Location Status')
+    expect(clear).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(2000)
+    watch.mock.calls[0][0](position(6.51, 21))
+    await vi.advanceTimersByTimeAsync(1000)
+    const panel = container.querySelector('[aria-labelledby="details-heading"]')!
+    expect(panel.textContent).toContain('6.510000 degrees')
+    expect(panel.textContent).toContain('21 meters')
+    expect(panel.textContent).toContain('1 second')
+    const fixTime = panel.querySelector('time')?.dateTime
+    expect(fixTime).toBe('2026-11-21T12:00:02.000Z')
+    expect(status()).toContain('Tracking active')
+
+    watch.mock.calls[0][1]?.({ code: 2 } as GeolocationPositionError)
+    await nextTick()
+    expect(panel.textContent).toContain('Unable to obtain a new location. Showing your last known position.')
+    expect(panel.textContent).toContain('This position is historical')
+    expect(panel.textContent).toContain('6.510000 degrees')
+    expect(panel.querySelector('time')?.dateTime).toBe(fixTime)
+    expect(container.querySelector('[data-marker]')).toBeNull()
+    expect(clear).not.toHaveBeenCalled()
+
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true })
+    window.dispatchEvent(new Event('online'))
+    await nextTick()
+    expect(panel.textContent).toContain('Online')
+    expect(watch).toHaveBeenCalledOnce()
+    watch.mock.calls[0][0](position(6.52))
+    await nextTick()
+    expect(status()).toContain('Tracking active')
+    expect(panel.textContent).not.toContain('historical')
+    expect(panel.textContent).toContain('6.520000 degrees')
+  })
 
   it('marks expired fixes historical, removes the marker, and accepts a new fix', async () => {
     button('Start Tracking').click()
