@@ -111,6 +111,29 @@ describe('Google Maps location map', () => {
     expect(accuracy.setMap).toHaveBeenLastCalledWith(null)
   })
 
+  it('keeps the default view unmarked and centers only on the first fresh fix', async () => {
+    const props = mount({ point: undefined })
+    await settle()
+    tileCallback()
+    await nextTick()
+    expect(host.textContent).toContain('No current device position is plotted')
+    expect(marker.map).toBeNull()
+    expect(map.panTo).not.toHaveBeenCalled()
+
+    props.point = { ...sample, latitude: 6.123456789, longitude: -10.987654321 }
+    await nextTick()
+    expect(marker.position).toEqual({ lat: 6.123456789, lng: -10.987654321 })
+    expect(map.panTo).toHaveBeenCalledExactlyOnceWith(marker.position)
+
+    props.point = undefined
+    await nextTick()
+    expect(marker.position).toBeNull()
+    props.point = { ...sample, latitude: 6.456789123 }
+    await nextTick()
+    expect(marker.position).toEqual({ lat: 6.456789123, lng: -10.81 })
+    expect(map.panTo).toHaveBeenCalledTimes(1)
+  })
+
   it.each([
     ['VITE_GOOGLE_MAPS_API_KEY', 'API key'],
     ['VITE_GOOGLE_MAPS_MAP_ID', 'map ID'],

@@ -89,3 +89,15 @@ zoom, pan, and **Center on My Location**. Stop and check that the historical
 details remain while the live overlays disappear. Revoke site permission to
 verify the denied state. Verify the demo route and controls with TalkBack, and
 reopen the installed app offline after a complete online load.
+
+## Diagnose a position near Fendall Campus
+
+Open **Developer location diagnostics** and select **Device location**.
+After starting tracking, compare the raw browser latitude and longitude with
+the plotted marker. Check the reported accuracy, UTC fix timestamp, and fix
+age. A wide accuracy estimate indicates approximate positioning. Enable
+precise location for Chrome if available and repeat outdoors. The initial
+Monrovia viewport is a map starting point. VisionAid plots a device marker
+only after a valid, fresh browser fix. The first fix centers the map, subsequent
+fixes move the marker, and **Center on My Location** returns the view to the
+marker after panning.

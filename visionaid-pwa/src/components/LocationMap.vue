@@ -25,6 +25,7 @@ const error = ref('')
 const mapType = ref<'roadmap' | 'satellite'>('roadmap')
 const showMap = computed(() => props.enabled && props.online && apiKey && mapId && !error.value)
 
+let centeredOnDeviceFix = false
 let map: google.maps.Map | undefined
 let marker: google.maps.marker.AdvancedMarkerElement | undefined
 let accuracy: google.maps.Circle | undefined
@@ -72,13 +73,15 @@ function syncPoint() {
   }
 
   const position = pointPosition(props.point)
-  const firstPoint = !marker.map
   marker.position = position
   marker.title = props.route ? 'Simulated position' : 'Current device position'
   marker.map = map
   accuracy.setOptions({ center: position, radius: props.point.accuracy })
   accuracy.setMap(map)
-  if (!props.route && (firstPoint || map.getBounds()?.contains(position) === false)) center()
+  if (!props.route && !centeredOnDeviceFix) {
+    centeredOnDeviceFix = true
+    center()
+  }
 }
 
 watch(container, async (host, _previous, onCleanup) => {
@@ -105,6 +108,7 @@ watch(container, async (host, _previous, onCleanup) => {
     routeLine?.setMap(null)
     map = marker = accuracy = routeLine = undefined
     ready.value = false
+    centeredOnDeviceFix = false
     host.replaceChildren()
   })
 
@@ -182,8 +186,9 @@ defineExpose({ center, ready })
     <template v-else-if="enabled && !ready">Loading Google Maps…</template>
   </p>
   <p v-if="ready" id="map-description">
-    {{ route ? 'The line and marker represent the simulated route and position.'
-      : 'The marker shows the current device position. The circle shows the estimated accuracy in meters.' }}
+    <template v-if="route">The line shows the simulated route. A marker appears when there is a simulated position.</template>
+    <template v-else-if="point">The marker shows the current device estimate. The circle shows its estimated accuracy.</template>
+    <template v-else>No current device position is plotted. The map starts in Monrovia and may show the last area viewed.</template>
     Location details are listed below.
   </p>
   <button v-if="enabled && online && error" type="button" @click="error = ''">Retry Google Maps</button>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import LocationMap from '../components/LocationMap.vue'
 import { demoRoute } from '../data-sources/location'
 import { useGpsTracking } from '../composables/useGpsTracking'
@@ -11,6 +11,19 @@ const approximateLocationThresholdMeters = 100
 const online = ref(navigator.onLine)
 const isDemo = computed(() => mode.value === 'demo')
 const marker = computed(() => isDemo.value ? sample.value : current.value)
+const diagnosticsOpen = ref(false)
+const diagnosticsTime = ref(Date.now())
+const fixAgeSeconds = computed(() => sample.value
+  ? Math.floor(Math.max(0, diagnosticsTime.value - sample.value.timestamp) / 1000)
+  : undefined)
+
+watch(diagnosticsOpen, (open, _previous, onCleanup) => {
+  if (!open) return
+  diagnosticsTime.value = Date.now()
+  const timer = setInterval(() => { diagnosticsTime.value = Date.now() }, 1000)
+  onCleanup(() => clearInterval(timer))
+})
+
 const time = computed(() => sample.value ? new Date(sample.value.timestamp) : undefined)
 
 const realMessages = {
@@ -103,6 +116,19 @@ onUnmounted(() => {
     </dl>
   </section>
 
+  <details class="diagnostics" @toggle="diagnosticsOpen = ($event.currentTarget as HTMLDetailsElement).open">
+    <summary>Developer location diagnostics</summary>
+    <dl v-if="diagnosticsOpen">
+      <div><dt>Location provider</dt><dd>{{ isDemo ? 'VisionAid simulator' : 'Browser Geolocation (navigator.geolocation)' }}</dd></div>
+      <div><dt>Fix status</dt><dd>{{ current ? (isDemo ? 'Simulated' : 'Current device estimate') : (sample ? 'Historical' : 'No fix') }}</dd></div>
+      <div><dt>Latitude</dt><dd>{{ sample?.latitude ?? 'Unavailable' }}</dd></div>
+      <div><dt>Longitude</dt><dd>{{ sample?.longitude ?? 'Unavailable' }}</dd></div>
+      <div><dt>Estimated accuracy</dt><dd>{{ sample ? sample.accuracy + ' meters' : 'Unavailable' }}</dd></div>
+      <div><dt>Fix timestamp (UTC)</dt><dd>{{ time?.toISOString() ?? 'Unavailable' }}</dd></div>
+      <div><dt>Fix age</dt><dd>{{ fixAgeSeconds === undefined ? 'Unavailable' : fixAgeSeconds + ' seconds' }}</dd></div>
+    </dl>
+  </details>
+
   <section aria-labelledby="sharing-heading">
     <h2 id="sharing-heading">Caretaker sharing</h2>
     <p id="sharing-status">Sharing is off. Secure caretaker sharing is pending.</p>
@@ -136,4 +162,14 @@ button:disabled { background: #e6eeeb; color: #42524f; cursor: default; }
 dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .75rem; }
 dl > div { background: white; padding: .75rem; border-radius: .4rem; }
 dd { margin: 0; overflow-wrap: anywhere; }
+.diagnostics { margin-block: 1rem; }
+.diagnostics summary {
+  cursor: pointer;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: .55rem .75rem;
+  border: 1px solid #49615c;
+  border-radius: .4rem;
+  font-weight: 700;
+}
 </style>

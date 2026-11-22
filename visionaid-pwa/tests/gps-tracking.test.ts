@@ -7,7 +7,7 @@ import { LOCATION_STALE_MS } from '../src/data-sources/location'
 vi.mock('../src/components/LocationMap.vue', () => ({
   default: defineComponent({
     props: ['point', 'route', 'enabled', 'online'],
-    setup: (props) => () => h('div', { 'data-marker': props.point?.latitude }),
+    setup: (props) => () => h('div', { 'data-marker': props.point?.latitude, 'data-longitude': props.point?.longitude }),
   }),
 }))
 
@@ -110,6 +110,38 @@ describe('GPS tracking dashboard', () => {
     await nextTick()
     expect(container.textContent).toContain('10 meters')
     expect(container.textContent).not.toContain('reporting an approximate location')
+  })
+
+  it('clears demo data before reporting exact device coordinates and fix age', async () => {
+    const details = container.querySelector('details')!
+    details.open = true
+    details.dispatchEvent(new Event('toggle'))
+    await nextTick()
+    expect(details.textContent).toContain('No fix')
+
+    const [device, demo] = container.querySelectorAll<HTMLInputElement>('input[type="radio"]')
+    demo.click()
+    await nextTick()
+    button('Start Simulation').click()
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(details.textContent).toContain('VisionAid simulator')
+
+    device.click()
+    await nextTick()
+    expect(details.textContent).toContain('Browser Geolocation (navigator.geolocation)')
+    expect(details.textContent).not.toContain('6.3034')
+    expect(container.querySelector('[data-marker]')).toBeNull()
+
+    button('Start Tracking').click()
+    initial.mock.calls[0][0](position(6.123456789, 8.75))
+    await vi.advanceTimersByTimeAsync(3000)
+    const marker = container.querySelector('[data-marker]')
+    expect(marker?.getAttribute('data-marker')).toBe('6.123456789')
+    expect(marker?.getAttribute('data-longitude')).toBe('-10.8')
+    expect(details.textContent).toContain('6.123456789')
+    expect(details.textContent).toContain('8.75 meters')
+    expect(details.textContent).toContain('3 seconds')
+    expect(details.textContent).toContain('2026-11-21T12:00:02.000Z')
   })
 
   it.each([[1, 'Permission denied'], [2, 'Location unavailable'], [3, 'Location timed out']])(
