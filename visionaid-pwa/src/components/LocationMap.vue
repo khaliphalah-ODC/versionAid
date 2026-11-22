@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { importLibrary, setOptions } from '@googlemaps/js-api-loader'
+import { prefersReducedMotion } from '../services/accessibilityPreferences'
 import type { LocationSample } from '../data-sources/location'
 
 const props = defineProps<{
@@ -40,7 +41,9 @@ function pointPosition(point: LocationSample): google.maps.LatLngLiteral {
 function center() {
   if (!map || !ready.value) return
   if (props.point) {
-    map.panTo(pointPosition(props.point))
+    const position = pointPosition(props.point)
+    if (prefersReducedMotion()) map.setCenter(position)
+    else map.panTo(position)
     if ((map.getZoom() ?? 0) < 16) map.setZoom(16)
   } else if (routeLine) {
     fitRoute()

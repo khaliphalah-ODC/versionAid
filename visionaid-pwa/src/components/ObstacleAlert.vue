@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { speakTransition } from '../services/voiceFeedback'
 import type { Evaluation } from '../domain/evaluateObstacle'
 
 const props = defineProps<{ evaluation: Evaluation }>()
@@ -22,8 +23,17 @@ const announcement = ref('')
 const announcementDelayMs = 750
 
 // Coalesce quick scenario changes. Identical messages do not retrigger this watcher.
-watch(message, (nextMessage, _previousMessage, onCleanup) => {
-  const timer = setTimeout(() => { announcement.value = nextMessage }, announcementDelayMs)
+const transition = computed(() => {
+  const result = props.evaluation
+  if (result.status === 'obstacle') return result.obstacles.map(({ direction }) => direction).join(',')
+  if (result.status === 'unknown') return result.reason
+  return result.status
+})
+watch(transition, (_next, _previous, onCleanup) => {
+  const timer = setTimeout(() => {
+    announcement.value = message.value
+    speakTransition('sensor', 'Simulated data. ' + message.value)
+  }, announcementDelayMs)
   onCleanup(() => clearTimeout(timer))
 })
 </script>

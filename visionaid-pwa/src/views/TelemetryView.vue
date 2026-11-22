@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import ReadStatus from '../components/ReadStatus.vue'
 import SensorCard from '../components/SensorCard.vue'
 import SourceBadge from '../components/SourceBadge.vue'
 import ObstacleAlert from '../components/ObstacleAlert.vue'
 import { simulate, type SimulatorScenario } from '../data-sources/simulator'
-import { snapshotStatus, OBSTACLE_THRESHOLD_CM } from '../domain/device'
+import { isValidDistance, snapshotStatus, OBSTACLE_THRESHOLD_CM } from '../domain/device'
 import { evaluateObstacle } from '../domain/evaluateObstacle'
 
 defineProps<{ heading: string; description: string }>()
@@ -29,6 +30,17 @@ const now = ref(Date.now())
 const snapshot = ref(simulate(scenario.value, now.value))
 const freshness = computed(() => snapshotStatus(snapshot.value, now.value))
 const evaluation = computed(() => evaluateObstacle(snapshot.value, now.value))
+const sensorSummary = computed(() => {
+  const readings = Object.values(snapshot.value.readings).map(({ direction, distanceCm, status }) => {
+    if (freshness.value === 'stale' || status === 'stale') return `${direction} sensor data is outdated.`
+    if (freshness.value !== 'fresh' || status !== 'valid' || !isValidDistance(distanceCm)) {
+      return `${direction} sensor reading unavailable.`
+    }
+    const warning = distanceCm < OBSTACLE_THRESHOLD_CM ? ' Obstacle detected.' : ''
+    return `${direction} sensor reports ${distanceCm} centimeters.${warning}`
+  })
+  return 'Simulated data. ' + readings.join(' ')
+})
 const sampleTime = computed(() => new Date(snapshot.value.receivedAt))
 const sampleAge = computed(() => Math.floor(Math.max(0, now.value - snapshot.value.receivedAt) / 1_000))
 let timer: ReturnType<typeof setInterval> | undefined
@@ -75,6 +87,7 @@ onUnmounted(() => clearInterval(timer))
     Last sample <time :datetime="sampleTime.toISOString()">{{ sampleTime.toLocaleTimeString() }}</time>
     ({{ sampleAge }} s ago)
   </p>
+  <ReadStatus label="Read Sensor Status" :message="sensorSummary" />
   <p>Obstacle threshold is below {{ OBSTACLE_THRESHOLD_CM }} cm.</p>
 
   <section class="controls" aria-labelledby="simulator-heading">

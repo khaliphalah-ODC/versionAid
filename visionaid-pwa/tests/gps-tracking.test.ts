@@ -69,7 +69,7 @@ describe('GPS tracking dashboard', () => {
   it('starts only on request, validates fixes, updates details, and stops watch zero', async () => {
     expect(initial).not.toHaveBeenCalled()
     expect(button('Stop Tracking').disabled).toBe(true)
-    expect(button('Share location').disabled).toBe(true)
+    expect(button('Start Sharing').disabled).toBe(true)
     button('Start Tracking').click()
     await nextTick()
     expect(status()).toMatch(/Requesting location/)
@@ -96,6 +96,24 @@ describe('GPS tracking dashboard', () => {
     expect(clear).toHaveBeenCalledWith(0)
     expect(status()).toMatch(/Tracking stopped/)
     expect(container.textContent).not.toContain('6.550000 degrees')
+  })
+
+  it('announces GPS transitions and provides an on-demand location summary without coordinates', async () => {
+    button('Start Tracking').click()
+    await nextTick()
+    expect(status()).toContain('Requesting location')
+    initial.mock.calls[0][0](position(6.123456789, 11))
+    await nextTick()
+    expect(status()).toContain('Tracking active')
+    button('Read My Location Status').click()
+    await nextTick()
+    await nextTick()
+    const summary = container.querySelector('.status-result')?.textContent
+    expect(summary).toContain('Estimated accuracy: 11 meters')
+    expect(summary).not.toContain('6.123')
+    button('Stop Tracking').click()
+    await nextTick()
+    expect(status()).toContain('Tracking stopped')
   })
 
   it('requests fresh high-accuracy fixes and explains an approximate reading', async () => {

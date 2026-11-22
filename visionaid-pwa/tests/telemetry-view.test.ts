@@ -68,7 +68,7 @@ describe('simulated telemetry', () => {
     const currentTimestamp = sampleTimestamp()
     expect(currentTimestamp).not.toBe(initialTimestamp)
 
-    const playbackButton = container.querySelector('button')!
+    const playbackButton = [...container.querySelectorAll('button')].find(button => button.textContent === 'Pause playback')!
     playbackButton.click()
     await vi.advanceTimersByTimeAsync(4_000)
     expect(sampleTimestamp()).toBe(currentTimestamp)
@@ -78,6 +78,16 @@ describe('simulated telemetry', () => {
     await nextTick()
     expect(sampleTimestamp()).not.toBe(currentTimestamp)
     expect(alertText()).toBe('No obstacle detected in current readings.')
+  })
+
+  it('reads a labeled summary of simulated readings when requested', async () => {
+    await selectScenario('left-obstruction')
+    const button = [...container.querySelectorAll('button')].find(item => item.textContent === 'Read Sensor Status')!
+    button.click()
+    await nextTick()
+    await nextTick()
+    expect(container.querySelector('.status-result')?.textContent).toContain('Simulated data.')
+    expect(container.querySelector('.status-result')?.textContent).toContain('left sensor reports 35 centimeters. Obstacle detected.')
   })
 
   it('coalesces rapid changes and leaves the announcement alone during repeated samples', async () => {

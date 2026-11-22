@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import ReadStatus from '../components/ReadStatus.vue'
+import { speakTransition } from '../services/voiceFeedback'
 import LocationMap from '../components/LocationMap.vue'
 import { demoRoute } from '../data-sources/location'
 import { useGpsTracking } from '../composables/useGpsTracking'
@@ -51,6 +53,15 @@ const message = computed(() => {
   return 'Demo Mode. Select Start Simulation to move along the sample route.'
 })
 
+const locationSummary = computed(() => {
+  if (current.value) {
+    return `${message.value} Estimated accuracy: ${Math.round(current.value.accuracy)} meters.`
+  }
+  if (time.value) return `${message.value} Last recorded at ${time.value.toLocaleTimeString()}.`
+  return message.value
+})
+watch(message, () => speakTransition('gps', locationSummary.value))
+
 function setMode(next: 'real' | 'demo') {
   if (mode.value === next) return
   mapEnabled.value = false
@@ -95,6 +106,8 @@ onUnmounted(() => {
     </template>
     <button type="button" :disabled="!map?.ready || (!marker && !isDemo)" @click="map?.center()">{{ isDemo ? 'Center demo map' : 'Center on My Location' }}</button>
   </div>
+
+  <ReadStatus label="Read My Location Status" :message="locationSummary" />
 
   <section aria-labelledby="map-heading">
     <h2 id="map-heading">Location map</h2>
@@ -143,7 +156,13 @@ onUnmounted(() => {
   <section aria-labelledby="sharing-heading">
     <h2 id="sharing-heading">Caretaker sharing</h2>
     <p id="sharing-status">Sharing is off. Secure caretaker sharing is pending.</p>
-    <button type="button" disabled aria-describedby="sharing-status">Share location</button>
+    <p>When sharing is available, you will be able to choose who can view your location, stop sharing, and revoke access.</p>
+    <div class="actions">
+      <button type="button" disabled aria-describedby="sharing-status">Start Sharing</button>
+      <button type="button" disabled aria-describedby="sharing-status">Stop Sharing</button>
+      <button type="button" disabled aria-describedby="sharing-status">View Approved Caretakers</button>
+      <button type="button" disabled aria-describedby="sharing-status">Revoke Access</button>
+    </div>
   </section>
 </template>
 
