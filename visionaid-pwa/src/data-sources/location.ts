@@ -21,7 +21,7 @@ export function isValidLocation(sample: LocationSample, now = Date.now()) {
 }
 
 export function browserLocationProvider(geolocation: Geolocation): LocationProvider {
-  const options: PositionOptions = { enableHighAccuracy: false, maximumAge: 5_000, timeout: 15_000 }
+  const options: PositionOptions = { enableHighAccuracy: true, maximumAge: 0, timeout: 25_000 }
 
   return {
     start(onSample, onError) {

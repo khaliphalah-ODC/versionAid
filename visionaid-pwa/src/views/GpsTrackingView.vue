@@ -7,6 +7,7 @@ import { useGpsTracking } from '../composables/useGpsTracking'
 const { mode, status, running, sample, current, selectMode, start, stop, reset } = useGpsTracking()
 const map = ref<InstanceType<typeof LocationMap>>()
 const mapEnabled = ref(false)
+const approximateLocationThresholdMeters = 100
 const online = ref(navigator.onLine)
 const isDemo = computed(() => mode.value === 'demo')
 const marker = computed(() => isDemo.value ? sample.value : current.value)
@@ -90,7 +91,11 @@ onUnmounted(() => {
     <h2 id="details-heading">{{ isDemo ? 'Simulated location details' : 'Device location details' }}</h2>
     <p v-if="sample && !current">{{ isDemo ? 'Last simulated reading.' : 'Last known reading. This position is historical.' }}</p>
     <p v-if="!sample">{{ status === 'requesting' ? 'Waiting for the first location reading.' : 'No location reading is available.' }}</p>
-    <dl v-else>
+    <p v-if="!isDemo && current && current.accuracy >= approximateLocationThresholdMeters">
+      Your device is reporting an approximate location. Enable precise location for your browser if available,
+      then try outdoors with a clear view of the sky.
+    </p>
+    <dl v-if="sample">
       <div><dt>Latitude</dt><dd>{{ sample.latitude.toFixed(6) }} degrees</dd></div>
       <div><dt>Longitude</dt><dd>{{ sample.longitude.toFixed(6) }} degrees</dd></div>
       <div><dt>{{ isDemo ? 'Simulated accuracy' : 'Estimated accuracy' }}</dt><dd>{{ Math.round(sample.accuracy) }} meters</dd></div>

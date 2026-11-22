@@ -11,7 +11,9 @@ satellite map with an Advanced Marker and an estimated accuracy circle.
 1. In [Google Cloud Console](https://console.cloud.google.com/), select a project
    and link a billing account. Enable the **Maps JavaScript API** for that project.
 2. Under Google Maps Platform **Map Management**, create a **JavaScript** map ID.
-   Use the ID from that project for Advanced Markers.
+   Use the ID from that project for Advanced Markers. Google’s `DEMO_MAP_ID`
+   is for map setup testing. The GPS page’s Demo Mode selector controls whether
+   positions come from the browser or the simulation.
 3. Under **Credentials**, create a browser API key. Set its application
    restriction to **Websites** and its API restriction to **Maps JavaScript API**.
    Authorize the exact origins that should run the app, such as
@@ -53,7 +55,8 @@ builds from `visionaid-pwa` and publishes `dist`.
 ## Tracking, privacy, and offline behavior
 
 - VisionAid uses `getCurrentPosition` and `watchPosition` after **Start Tracking**.
-  The browser controls location sources and sampling frequency. Tracking
+  The browser controls location sources and sampling frequency. VisionAid requests
+  fresh high-accuracy fixes. The reported accuracy in meters is an estimate. Tracking
   requires permission, device location services, and HTTPS or localhost.
 - VisionAid clears the watcher on stop or navigation and marks real readings
   stale after 30 seconds. The latest successful fix stays in page memory and

@@ -17,9 +17,9 @@ const clear = vi.fn<Geolocation['clearWatch']>()
 let container: HTMLElement
 let app: App | undefined
 
-function position(latitude = 6.3): GeolocationPosition {
+function position(latitude = 6.3, accuracy = 9): GeolocationPosition {
   return {
-    coords: { latitude, longitude: -10.8, accuracy: 9, altitude: null, altitudeAccuracy: null, heading: null, speed: null },
+    coords: { latitude, longitude: -10.8, accuracy, altitude: null, altitudeAccuracy: null, heading: null, speed: null },
     timestamp: Date.now(),
   } as GeolocationPosition
 }
@@ -94,6 +94,22 @@ describe('GPS tracking dashboard', () => {
     expect(clear).toHaveBeenCalledWith(0)
     expect(status()).toMatch(/Tracking stopped/)
     expect(container.textContent).not.toContain('6.550000 degrees')
+  })
+
+  it('requests fresh high-accuracy fixes and explains an approximate reading', async () => {
+    const options = expect.objectContaining({ enableHighAccuracy: true, maximumAge: 0 })
+    button('Start Tracking').click()
+    expect(initial).toHaveBeenCalledWith(expect.any(Function), expect.any(Function), options)
+    initial.mock.calls[0][0](position(6.3, 250))
+    await nextTick()
+    expect(watch).toHaveBeenCalledWith(expect.any(Function), expect.any(Function), options)
+    expect(container.textContent).toContain('250 meters')
+    expect(container.textContent).toContain('reporting an approximate location')
+
+    watch.mock.calls[0][0](position(6.31, 10))
+    await nextTick()
+    expect(container.textContent).toContain('10 meters')
+    expect(container.textContent).not.toContain('reporting an approximate location')
   })
 
   it.each([[1, 'Permission denied'], [2, 'Location unavailable'], [3, 'Location timed out']])(
