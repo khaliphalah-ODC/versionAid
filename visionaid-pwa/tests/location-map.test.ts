@@ -23,6 +23,7 @@ const initialize = vi.fn(function () { return map })
 const removeListener = vi.fn()
 
 let tileCallback: () => void
+let dragCallback: () => void
 let app: App | undefined
 let host: HTMLElement
 
@@ -52,8 +53,9 @@ beforeEach(() => {
     },
   } })
   Object.assign(marker, { map: undefined, position: undefined, title: undefined })
-  map.addListener.mockImplementation((_name, callback) => {
-    tileCallback = callback
+  map.addListener.mockImplementation((name, callback) => {
+    if (name === 'tilesloaded') tileCallback = callback
+    if (name === 'dragstart') dragCallback = callback
     return { remove: removeListener }
   })
   map.getMapCapabilities.mockReturnValue({ isAdvancedMarkersAvailable: true })
@@ -111,7 +113,7 @@ describe('Google Maps location map', () => {
     expect(accuracy.setMap).toHaveBeenLastCalledWith(null)
   })
 
-  it('keeps the default view unmarked and centers only on the first fresh fix', async () => {
+  it('follows fresh fixes until the user pans and can resume following', async () => {
     const props = mount({ point: undefined })
     await settle()
     tileCallback()
@@ -125,13 +127,20 @@ describe('Google Maps location map', () => {
     expect(marker.position).toEqual({ lat: 6.123456789, lng: -10.987654321 })
     expect(map.panTo).toHaveBeenCalledExactlyOnceWith(marker.position)
 
-    props.point = undefined
+    props.point = { ...sample, latitude: 6.234567891 }
     await nextTick()
-    expect(marker.position).toBeNull()
+    expect(map.setCenter).toHaveBeenCalledExactlyOnceWith({ lat: 6.234567891, lng: -10.81 })
+    dragCallback()
     props.point = { ...sample, latitude: 6.456789123 }
     await nextTick()
     expect(marker.position).toEqual({ lat: 6.456789123, lng: -10.81 })
     expect(map.panTo).toHaveBeenCalledTimes(1)
+    expect(map.setCenter).toHaveBeenCalledTimes(1)
+    const follow = [...host.querySelectorAll('button')].find(button => button.textContent === 'Follow my location')!
+    expect(follow.getAttribute('aria-pressed')).toBe('false')
+    follow.click()
+    await nextTick()
+    expect(map.panTo).toHaveBeenLastCalledWith(marker.position)
   })
 
   it.each([

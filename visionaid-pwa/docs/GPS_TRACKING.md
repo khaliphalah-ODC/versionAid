@@ -98,9 +98,9 @@ the plotted marker. Check the reported accuracy, UTC fix timestamp, and fix
 age. A wide accuracy estimate indicates approximate positioning. Enable
 precise location for Chrome if available and repeat outdoors. The initial
 Monrovia viewport is a map starting point. VisionAid plots a device marker
-only after a valid, fresh browser fix. The first fix centers the map, subsequent
-fixes move the marker, and **Center on My Location** returns the view to the
-marker after panning.
+only after a valid, fresh browser fix. The map follows fresh device fixes until you pan or turn off **Follow my
+location**. The marker keeps updating while follow is paused. **Center on My
+Location** returns to the marker and resumes following.
 
 ## Offline location and map recovery
 

@@ -28,7 +28,8 @@ const mapType = ref<'roadmap' | 'satellite'>('roadmap')
 const showMap = computed(() => props.enabled && props.online && apiKey && mapId && !error.value && !needsRetry.value)
 
 let offlineViewport: { center: google.maps.LatLngLiteral; zoom?: number } | undefined
-let centeredOnDeviceFix = false
+const following = ref(true)
+let lastPosition: google.maps.LatLngLiteral | undefined
 let map: google.maps.Map | undefined
 let marker: google.maps.marker.AdvancedMarkerElement | undefined
 let accuracy: google.maps.Circle | undefined
@@ -41,6 +42,7 @@ function pointPosition(point: LocationSample): google.maps.LatLngLiteral {
 function center() {
   if (!map || !ready.value) return
   if (props.point) {
+    if (!props.route) following.value = true
     const position = pointPosition(props.point)
     if (prefersReducedMotion()) map.setCenter(position)
     else map.panTo(position)
@@ -48,6 +50,11 @@ function center() {
   } else if (routeLine) {
     fitRoute()
   }
+}
+
+function toggleFollow() {
+  following.value = !following.value
+  if (following.value) center()
 }
 
 function fitRoute() {
@@ -70,6 +77,7 @@ function syncPoint() {
     marker.map = null
     marker.position = null
     accuracy.setMap(null)
+    lastPosition = undefined
     return
   }
 
@@ -79,15 +87,21 @@ function syncPoint() {
   marker.map = map
   accuracy.setOptions({ center: position, radius: props.point.accuracy })
   accuracy.setMap(map)
-  if (!props.route && !centeredOnDeviceFix) {
-    centeredOnDeviceFix = true
-    center()
+  if (!props.route && following.value) {
+    if (!lastPosition) center()
+    else if (position.lat !== lastPosition.lat || position.lng !== lastPosition.lng) map.setCenter(position)
   }
+  lastPosition = position
 }
 
 watch(container, async (host, _previous, onCleanup) => {
   if (!host || !apiKey || !mapId) return
   let cancelled = false
+  let dragListener: google.maps.MapsEventListener | undefined
+  function pauseOnKeyboardPan(event: KeyboardEvent) {
+    if (event.key.startsWith('Arrow')) following.value = false
+  }
+  host.addEventListener('keydown', pauseOnKeyboardPan)
   let tilesListener: google.maps.MapsEventListener | undefined
   const previousAuthFailure = window.gm_authFailure
   const authFailure = () => {
@@ -104,6 +118,8 @@ watch(container, async (host, _previous, onCleanup) => {
     clearTimeout(deadline)
     if (window.gm_authFailure === authFailure) window.gm_authFailure = previousAuthFailure
     tilesListener?.remove()
+    dragListener?.remove()
+    host.removeEventListener('keydown', pauseOnKeyboardPan)
     if (!props.online && map) {
       const center = map.getCenter()?.toJSON()
       if (center) offlineViewport = { center, zoom: map.getZoom() }
@@ -113,7 +129,7 @@ watch(container, async (host, _previous, onCleanup) => {
     routeLine?.setMap(null)
     map = marker = accuracy = routeLine = undefined
     ready.value = false
-    centeredOnDeviceFix = false
+    lastPosition = undefined
     host.replaceChildren()
   })
 
@@ -137,6 +153,7 @@ watch(container, async (host, _previous, onCleanup) => {
       gestureHandling: 'cooperative',
     })
     map = instance
+    dragListener = instance.addListener('dragstart', () => { following.value = false })
     marker = new AdvancedMarkerElement()
     accuracy = new Circle({
       strokeColor: '#005760', strokeOpacity: 0.9, strokeWeight: 2,
@@ -165,6 +182,7 @@ watch(() => props.enabled, (enabled) => {
     error.value = ''
     needsRetry.value = false
     offlineViewport = undefined
+    following.value = true
   }
 })
 watch(() => props.online, (online) => {
@@ -187,6 +205,7 @@ defineExpose({ center, ready })
   <div class="map-options" v-if="ready" role="group" aria-label="Google Maps view">
     <button type="button" :aria-pressed="mapType === 'roadmap'" @click="mapType = 'roadmap'">Street map</button>
     <button type="button" :aria-pressed="mapType === 'satellite'" @click="mapType = 'satellite'">Satellite</button>
+    <button v-if="!route" type="button" :aria-pressed="following" @click="toggleFollow">Follow my location</button>
   </div>
   <div
     v-if="showMap"
@@ -206,7 +225,7 @@ defineExpose({ center, ready })
   </p>
   <p v-if="ready" id="map-description">
     <template v-if="route">The line shows the simulated route. A marker appears when there is a simulated position.</template>
-    <template v-else-if="point">The marker shows the current device estimate. The circle shows its estimated accuracy.</template>
+    <template v-else-if="point">The marker shows the current device estimate. The circle shows its estimated accuracy. Panning pauses follow mode.</template>
     <template v-else>No current device position is plotted. The map starts in Monrovia and may show the last area viewed.</template>
     Location details are listed below.
   </p>
