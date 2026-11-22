@@ -170,6 +170,7 @@ const preview = simulate('normal')
   margin-top: auto;
   color: #005760;
   font-weight: 700;
+  text-decoration: none;
 }
 .hardware-note { margin-block: 1rem 0; color: #3d5954; }
 
