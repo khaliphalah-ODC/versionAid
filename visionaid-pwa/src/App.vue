@@ -55,7 +55,7 @@ body { margin: 0; }
 header { background: #102e2c; color: #fff; padding: 1rem clamp(1rem, 5vw, 3rem); }
 .wordmark { font-size: 1.5rem; }
 nav { display: flex; flex-wrap: wrap; gap: .25rem .5rem; margin-top: .5rem; }
-nav a { color: inherit; display: inline-flex; align-items: center; min-height: 44px; padding-inline: .65rem; }
+nav a { color: inherit; text-decoration: none; display: inline-flex; align-items: center; min-height: 44px; padding-inline: .65rem; }
 nav a[aria-current="page"] { background: #d1ebe1; color: #102e2c; border-radius: .4rem; font-weight: 700; }
 main { max-width: 60rem; margin: auto; padding: 1.5rem clamp(1rem, 5vw, 3rem); }
 h1, h2, button, summary { overflow-wrap: anywhere; }
